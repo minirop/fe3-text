@@ -1,3 +1,4 @@
+use byteorder::LittleEndian;
 use byteorder::ReadBytesExt;
 use clap::Parser;
 use clap_num::maybe_hex;
@@ -61,6 +62,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     println!("[Unknown17]");
                 }
+                0x80 => println!("[Unknown80]"),
+                0x81 => println!("[Unknown81]"),
                 0x84 => {
                     let portrait = rom.read_u8()?;
                     let flags = rom.read_u8()?;
@@ -73,10 +76,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     println!("[CloseFrame({frame})]");
                 }
-                0x87 => {
-                    // end of chapter?
-                    println!("[Unknown87]");
-                }
+                0x86 => println!("[Unknown86]"),
+                0x87 => println!("[Unknown87]"),
                 0x88 => {
                     let unknown = rom.read_u8()?;
 
@@ -89,10 +90,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("[PlaySong({song}, {volume})]");
                 }
                 0x8A => println!("[WaitForA]"),
+                0x8B => println!("[Unknown8B]"),
+                0x8C => println!("[Unknown8C]"),
+                0x8D => {
+                    let unk1 = rom.read_u8()?;
+                    let unk2 = rom.read_u8()?;
+
+                    println!("[Unknown8D({unk1}, {unk2})]");
+                }
+                0x8E => {
+                    let unk1 = rom.read_u8()?;
+                    let unk2 = rom.read_u8()?;
+
+                    println!("[Unknown8E({unk1}, {unk2})]");
+                }
                 0x8F => {
                     let unk = rom.read_u8()?;
                     println!("[Unknown8F({unk:#X})]");
                 }
+                0x90 => println!("[Unknown90]"),
+                0x91 => println!("[Unknown91]"),
                 0x92 => {
                     let frame = rom.read_u8()?;
 
@@ -100,10 +117,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 0x93 => println!("[Unknown93]"),
                 0x94 => {
-                    let unk1 = rom.read_u8()?;
-                    let unk2 = rom.read_u8()?;
-                    println!("[Unknown94({unk1:#X}, {unk2:#X})]");
+                    let unk = rom.read_u16::<LittleEndian>()?;
+                    println!("[Unknown94({unk:#X})]");
                 }
+                0x95 => println!("[Unknown95]"),
                 _ => panic!(
                     "Unknown command {command:#X} at index {:#X}",
                     rom.seek(SeekFrom::Current(0))?
