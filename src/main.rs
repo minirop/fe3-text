@@ -3,6 +3,8 @@ use byteorder::ReadBytesExt;
 use clap::Parser;
 use clap_num::maybe_hex;
 use std::fs::File;
+use std::io::Cursor;
+use std::io::Read;
 use std::io::Seek;
 use std::io::SeekFrom;
 
@@ -150,6 +152,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[allow(unused)]
+fn print_array_of_strings(begin: u64, end: u64) -> Result<(), Box<dyn std::error::Error>> {
+    let mut rom = File::open("fe3.sfc")?;
+    rom.seek(SeekFrom::Start(begin))?;
+    let mut buffer = vec![0u8; (end - begin) as usize];
+    rom.read(&mut buffer)?;
+
+    let mut cursor = Cursor::new(buffer);
+    while let Ok(data) = cursor.read_u16::<LittleEndian>() {
+        if data == 0xFFFF {
+            println!();
+        } else {
+            let c = CHARACTERS[0][data as usize + 1];
+            let c = if c == ' ' { 'ー' } else { c };
+            print!("{c}");
+        }
+    }
+
+    Ok(())
+}
+
 #[rustfmt::skip]
 const CHARACTERS: [[char; 256]; 4] = [
     [   // 11
@@ -173,7 +196,7 @@ const CHARACTERS: [[char; 256]; 4] = [
     [   // 12
         /* 00 */ '.', '待', '.', '.', '東', '方', '辺', '境', '.', '.', '助', '.', '.', '.', '身', '愛',
         /* 10 */ '姉', '姫', '.', '々', '.', '年', '日', '対', '.', '.', '彼', '解', '放', '島', '.', '.',
-        /* 20 */ '近', '村', '旅', '悪', '.', '知', '陸', '.', '.', '建', '.', '.', '.', '占', 'X', '.',
+        /* 20 */ '近', '村', '旅', '悪', '.', '知', '陸', '.', '.', '建', '.', '.', '.', '占', '領', '.',
         /* 30 */ '名', '.', '.', '公', '.', '.', '前', '.', '.', '同', '盟', '.', '財', '宝', '敢', '箱',
         /* 40 */ '俺', '奴', '中', '.', '.', '下', '都', '.', '.', '無', '砦', '.', '将', '.', '.', '.',
         /* 50 */ '門', '.', '後', '.', '入', '休', '.', '.', '金', '自', '治', '好', '意', '.', '傭', '.',
