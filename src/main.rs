@@ -1,3 +1,5 @@
+#![allow(unused_assignments)]
+
 use byteorder::LittleEndian;
 use byteorder::ReadBytesExt;
 use byteorder::WriteBytesExt;
@@ -33,6 +35,7 @@ enum Commands {
 
 #[derive(Subcommand, Debug)]
 enum CompilerCommands {
+    Dialogue { output: String },
     List { output: String },
 }
 
@@ -55,6 +58,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match args.command {
         Commands::Compile { command } => match command {
+            CompilerCommands::Dialogue { output } => compile_dialogue(&args.filename, &output),
             CompilerCommands::List { output } => compile_array_of_string(&args.filename, &output),
         },
         Commands::Decompile { command } => match command {
@@ -88,13 +92,18 @@ fn decompile_dialogue(filename: &str, offset: u64) -> Result<(), Box<dyn std::er
                     let zero = rom.read_u8()?;
                     assert_eq!(zero, 0);
                     let colour = rom.read_u8()?;
-                    println!("[SetColor({colour:#X})]");
+                    print!("[SetColor({colour:#X})]");
                 }
                 0x0C => {
                     let other = rom.read_u8()?;
                     println!("[Unknown0C({other})]");
                 }
-                0x10 => println!("[Unknown10]"),
+                0x10 => {
+                    let unk1 = rom.read_u8()?;
+                    let unk2 = rom.read_u8()?;
+                    let unk3 = rom.read_u8()?;
+                    println!("[Unknown10({unk1}, {unk2}, {unk3})]");
+                }
                 0x11 | 0x12 | 0x13 | 0x14 => page = command as usize - 0x11,
                 0x16 => {
                     let ten = rom.read_u8()?;
@@ -189,6 +198,192 @@ fn decompile_dialogue(filename: &str, offset: u64) -> Result<(), Box<dyn std::er
 
             rom.seek(SeekFrom::Current(-1))?;
         }
+    }
+
+
+    Ok(())
+}
+
+// rewrite this ugly code
+fn compile_dialogue(filename: &str, output: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let script = read_to_string(filename)?;
+    let mut file = File::create(output)?;
+    let script = script.chars().collect::<Vec<_>>();
+    let mut index = 0;
+    let mut current_page = 99;
+    while index < script.len() {
+        if script[index] == '[' {
+            current_page = 99; // reset to invalid page
+            file.write_u8(0)?;
+
+            let mut end_index = index + 1;
+            while end_index < script.len() && script[end_index] != ']' && script[end_index] != '(' {
+                end_index += 1;
+            }
+
+            let command = String::from_iter(&script[(index + 1)..end_index]);
+            let mut args = vec![];
+
+            index = end_index;
+            if script[index] == '(' {
+                index += 1;
+                end_index = index;
+
+                while end_index < script.len() && script[end_index] != ')' {
+                    end_index += 1;
+                }
+
+                args = String::from_iter(&script[index..end_index])
+                    .split(",")
+                    .map(str::trim)
+                    .map(String::from)
+                    .collect::<Vec<_>>();
+
+                assert_eq!(script[end_index], ')');
+                index = end_index + 1;
+            }
+            if script[index] != ']' {
+                panic!("ERROR // {} / {}", index, script[index]);
+            }
+
+            match command.as_str() {
+                "End" => file.write_u8(0x00)?,
+                "ClearFrame" => file.write_u8(0x02)?,
+                "Unknown05" => file.write_u8(0x05)?,
+                "Unknown0C" => {
+                    file.write_u8(0x0C)?;
+
+                    let unk = maybe_hex::<u8>(&args[0]).unwrap();
+                    file.write_u8(unk)?;
+                }
+                "Unknown10" => {
+                    file.write_u8(0x10)?;
+
+                    let unk1 = maybe_hex::<u8>(&args[0]).unwrap();
+                    let unk2 = maybe_hex::<u8>(&args[1]).unwrap();
+                    let unk3 = maybe_hex::<u8>(&args[2]).unwrap();
+                    file.write_u8(unk1)?;
+                    file.write_u8(unk2)?;
+                    file.write_u8(unk3)?;
+                }
+                "Unknown16" => {
+                    file.write_u8(0x16)?;
+
+                    file.write_u8(0x10)?;
+                    let unk = maybe_hex::<u8>(&args[0]).unwrap();
+                    file.write_u8(unk)?;
+                }
+                "Unknown17" => {
+                    file.write_u8(0x17)?;
+
+                    file.write_u8(0xEF)?;
+                    file.write_u8(0xFF)?;
+                }
+                "StartDialogue" => {
+                    file.write_u8(0x88)?;
+
+                    let unk = maybe_hex::<u8>(&args[0]).unwrap();
+                    file.write_u8(unk)?;
+                }
+                "PlaySong" => {
+                    file.write_u8(0x89)?;
+
+                    let song = maybe_hex::<u8>(&args[0]).unwrap();
+                    let volume = maybe_hex::<u8>(&args[1]).unwrap();
+                    file.write_u8(song)?;
+                    file.write_u8(volume)?;
+                }
+                "Unknown80" => file.write_u8(0x80)?,
+                "Unknown81" => file.write_u8(0x81)?,
+                "ShowPortrait" => {
+                    file.write_u8(0x84)?;
+
+                    let portrait_id = PORTRAITS.iter().position(|c| c == &args[0]).unwrap();
+                    let flags = maybe_hex::<u8>(&args[1]).unwrap();
+
+                    file.write_u8(portrait_id as u8)?;
+                    file.write_u8(flags)?;
+                }
+                "CloseFrame" => {
+                    file.write_u8(0x85)?;
+
+                    let id = maybe_hex::<u8>(&args[0]).unwrap();
+                    file.write_u8(id)?;
+                }
+                "WaitForA" => file.write_u8(0x8A)?,
+                "Unknown8B" => file.write_u8(0x8B)?,
+                "Unknown8C" => file.write_u8(0x8C)?,
+                "Unknown8D" => {
+                    file.write_u8(0x8D)?;
+
+                    let unk1 = maybe_hex::<u8>(&args[0]).unwrap();
+                    let unk2 = maybe_hex::<u8>(&args[1]).unwrap();
+                    file.write_u8(unk1)?;
+                    file.write_u8(unk2)?;
+                }
+                "Unknown8E" => {
+                    file.write_u8(0x8E)?;
+
+                    let unk1 = maybe_hex::<u8>(&args[0]).unwrap();
+                    let unk2 = maybe_hex::<u8>(&args[1]).unwrap();
+                    file.write_u8(unk1)?;
+                    file.write_u8(unk2)?;
+                }
+                "Unknown8F" => {
+                    file.write_u8(0x8F)?;
+
+                    let unk = maybe_hex::<u8>(&args[0]).unwrap();
+                    file.write_u8(unk)?;
+                }
+                "Unknown90" => file.write_u8(0x90)?,
+                "Unknown91" => file.write_u8(0x91)?,
+                "SwitchFrame" => {
+                    file.write_u8(0x92)?;
+
+                    let id = maybe_hex::<u8>(&args[0]).unwrap();
+                    file.write_u8(id)?;
+                }
+                "Unknown93" => file.write_u8(0x93)?,
+                "Unknown95" => file.write_u8(0x95)?,
+                "SetColor" => {
+                    file.write_u8(0x07)?;
+                    file.write_u8(0x00)?;
+
+                    let colour = maybe_hex::<u8>(&args[0]).unwrap();
+                    file.write_u8(colour)?;
+                }
+                _ => panic!("{command}"),
+            }
+        } else {
+            let c = script[index];
+            if c == '\n' {
+                // do nothing for now
+            } else {
+                for page in 0..4 {
+                    if let Some(id) = CHARACTERS[page].iter().position(|&r| r == c) {
+                        if current_page != page {
+                            file.write_u8(page as u8 + 0x11)?;
+                            current_page = page;
+                        }
+                        file.write_u8(id as u8)?;
+                        break;
+                    }
+
+                    if page == 3 {
+                        if c == '\\' {
+                            index += 1;
+                            assert_eq!(script[index], 'n');
+                            file.write_u8(0x00)?;
+                            file.write_u8(0x01)?;
+                            break;
+                        } else {
+                            panic!("LOL: {c} / {}", script[index + 1]);
+                        }
+                    }
+                }
+            }
+        }
+        index += 1;
     }
 
     Ok(())
