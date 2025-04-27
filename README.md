@@ -1,13 +1,33 @@
 # FE3 text
 
-Decompiles dialogue scripts from Fire Emblem 3.
+Compiles/Decompiles dialogue scripts and list of strings from Fire Emblem 3.
 
 ## Usage
 
+### Decompile a dialogue
+
 ```console
-$ fe3-text <file> -o <offset>
+$ fe3-text <file> decompile dialogue [-o <offset>]
 ```
-*offset* can be omitted if it's zero.
+
+### Compile a dialogue (not implemented)
+
+```console
+$ fe3-text <file> compile dialogue -o <output>
+```
+
+### Print a list of strings
+
+```console
+$ fe3-text <file> decompile list [-s <start offset>] -e <end offset>
+```
+
+### Compile a list of string
+
+```console
+$ fe3-text <file> compile list -o <output>
+```
+`file` is a text file with one string per line.
 
 ## TODO
 

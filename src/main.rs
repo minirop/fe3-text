@@ -1,8 +1,11 @@
 use byteorder::LittleEndian;
 use byteorder::ReadBytesExt;
+use byteorder::WriteBytesExt;
 use clap::Parser;
+use clap::Subcommand;
 use clap_num::maybe_hex;
 use std::fs::File;
+use std::fs::read_to_string;
 use std::io::Cursor;
 use std::io::Read;
 use std::io::Seek;
@@ -12,17 +15,61 @@ use std::io::SeekFrom;
 struct Args {
     filename: String,
 
-    #[arg(short, long, value_parser=maybe_hex::<u64>, default_value="0")]
-    offset: u64,
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    Compile {
+        #[command(subcommand)]
+        command: CompilerCommands,
+    },
+    Decompile {
+        #[command(subcommand)]
+        command: DecompilerCommands,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum CompilerCommands {
+    List { output: String },
+}
+
+#[derive(Subcommand, Debug)]
+enum DecompilerCommands {
+    Dialogue {
+        #[arg(short, long, value_parser=maybe_hex::<u64>, default_value="0")]
+        offset: u64,
+    },
+    List {
+        #[arg(short, long, value_parser=maybe_hex::<u64>, default_value="0")]
+        start: u64,
+        #[arg(short, long, value_parser=maybe_hex::<u64>)]
+        end: u64,
+    },
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    let mut rom = File::open(args.filename)?;
-    rom.seek(SeekFrom::Start(args.offset))?;
+    match args.command {
+        Commands::Compile { command } => match command {
+            CompilerCommands::List { output } => compile_array_of_string(&args.filename, &output),
+        },
+        Commands::Decompile { command } => match command {
+            DecompilerCommands::Dialogue { offset } => decompile_dialogue(&args.filename, offset),
+            DecompilerCommands::List { start, end } => {
+                print_array_of_strings(&args.filename, start, end)
+            }
+        },
+    }
+}
 
-    let mut missing = false;
+fn decompile_dialogue(filename: &str, offset: u64) -> Result<(), Box<dyn std::error::Error>> {
+    let mut rom = File::open(filename)?;
+    rom.seek(SeekFrom::Start(offset))?;
+
     let mut page = 0;
     loop {
         let id = rom.read_u8()?;
@@ -133,7 +180,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             while character != 0 {
                 let c = CHARACTERS[page][character as usize];
                 if c == '.' {
-                    missing = true;
                     print!(" {:02X}/{:02X} ", page + 0x11, character);
                 } else {
                     print!("{c}");
@@ -145,16 +191,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    if missing {
-        todo!();
-    }
-
     Ok(())
 }
 
-#[allow(unused)]
-fn print_array_of_strings(begin: u64, end: u64) -> Result<(), Box<dyn std::error::Error>> {
-    let mut rom = File::open("fe3.sfc")?;
+fn print_array_of_strings(
+    filename: &str,
+    begin: u64,
+    end: u64,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut rom = File::open(filename)?;
     rom.seek(SeekFrom::Start(begin))?;
     let mut buffer = vec![0u8; (end - begin) as usize];
     rom.read(&mut buffer)?;
@@ -167,6 +212,29 @@ fn print_array_of_strings(begin: u64, end: u64) -> Result<(), Box<dyn std::error
             let c = CHARACTERS[0][data as usize + 1];
             let c = if c == ' ' { 'ー' } else { c };
             print!("{c}");
+        }
+    }
+
+    Ok(())
+}
+
+fn compile_array_of_string(filename: &str, output: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let strings = read_to_string(filename)?;
+
+    let mut output_file = File::create(output)?;
+
+    let cs = &CHARACTERS[0];
+    for string in strings.split("\n") {
+        if string.len() > 0 {
+            for c in string.chars() {
+                let index = if c == 'ー' {
+                    0xC4
+                } else {
+                    cs.iter().position(|&r| r == c).unwrap()
+                };
+                output_file.write_u16::<LittleEndian>((index - 1) as u16)?;
+            }
+            output_file.write_u16::<LittleEndian>(0xFFFF)?;
         }
     }
 
