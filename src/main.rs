@@ -6,6 +6,7 @@ use byteorder::WriteBytesExt;
 use clap::Parser;
 use clap::Subcommand;
 use clap_num::maybe_hex;
+use indexmap::IndexMap;
 use std::fs::File;
 use std::fs::read_to_string;
 use std::io::Cursor;
@@ -403,7 +404,7 @@ fn print_array_of_strings(
 
     let mut cursor = Cursor::new(buffer);
     while let Ok(data) = cursor.read_u16::<LittleEndian>() {
-        if data == 0xFFFF || data == 0xFFFE || data == 0xFFFD {
+        if data == 0xFFFF {
             println!();
         } else if data == 0xFFFE {
             print!("\\r"); // "line break storage/memory"?
@@ -425,49 +426,35 @@ fn print_array_of_strings(
 
 fn compile_array_of_string(filename: &str, output: &str) -> Result<(), Box<dyn std::error::Error>> {
     let strings = read_to_string(filename)?;
+    let strings: IndexMap<String, String> = serde_json::from_str(&strings).unwrap();
 
     let mut output_file = File::create(output)?;
 
-    for string in strings.split("\n") {
-        if string.len() > 0 {
-            let label = string.chars().take_while(|c| *c != ' ').collect::<String>();
-            writeln!(output_file, "{label}:")?;
+    for (label, jp_string) in strings {
+        writeln!(output_file, "{label}:")?;
 
-            let jp_string = string
-                .chars()
-                .skip_while(|c| *c != ' ')
-                .skip(1)
-                .collect::<String>();
-
-            if jp_string.len() > 0 {
-                write!(output_file, ".db")?;
-                let mut is_special_char = false;
-                for c in jp_string.chars() {
-                    if c == '\\' {
-                        is_special_char = true;
-                    } else if is_special_char {
-                        match c {
-                            'n' => write!(output_file, " $FD $FF")?,
-                            'r' => write!(output_file, " $FE $FF")?,
-                            _ => panic!("Unknown special char: {c}"),
-                        }
-
-                        is_special_char = false;
-                    } else {
-                        let index = LISTS_CHARACTERS.iter().position(|&r| r == c).unwrap();
-                        write!(output_file, " ${:02X} ${:02X}", index & 0xFF, index >> 8)?;
-                    }
-                }
-                writeln!(output_file, " $FF $FF")?;
+        write!(output_file, ".db")?;
+        for c in jp_string.chars() {
+            if c == '\n' {
+                write!(output_file, " $FD $FF")?;
+            } else if c == '\r' {
+                write!(output_file, " $FE $FF")?;
+            } else {
+                let index = LISTS_CHARACTERS
+                    .iter()
+                    .position(|&r| r == c)
+                    .expect(&format!("{c}???"));
+                write!(output_file, " ${:02X} ${:02X}", index & 0xFF, index >> 8)?;
             }
         }
+        writeln!(output_file, " $FF $FF")?;
     }
 
     Ok(())
 }
 
 #[rustfmt::skip]
-const LISTS_CHARACTERS: [char; 279] = [
+const LISTS_CHARACTERS: [char; 283] = [
     /*  00 */ 'あ', 'い', 'う', 'え', 'お', 'か', 'き', 'く', 'け', 'こ', 'さ', 'し', 'す', 'せ', 'そ', 'た',
     /*  10 */ 'ち', 'つ', 'て', 'と', 'な', 'に', 'ぬ', 'ね', 'の', 'は', 'ひ', 'ふ', 'へ', 'ほ', 'ま', 'み',
     /*  20 */ 'む', 'め', 'も', 'や', 'ゆ', 'よ', 'ら', 'り', 'る', 'れ', 'ろ', 'わ', 'を', 'ん', 'が', 'ぎ',
@@ -484,8 +471,8 @@ const LISTS_CHARACTERS: [char; 279] = [
     /*  D0 */ '況', '終', '断', '話', '門', '道', '魔', '運', '所', '持', '品', '捨', '交', '換', '預', '闘',
     /*  E0 */ '技', '場', '防', '城', '装', '使', '用', '攻', '撃', '速', '守', '備', '効', '幸', '第', '章',
     /*  F0 */ 'Ｔ', 'Ｏ', '部', '騎', '＋', '宝', '箱', 'Ｂ', '器', '回', '復', '系', '？', '士', '：', '命',
-    /* 100 */ '中', '重', '必', '殺', '武', '╔', '╦', '╗', '╠', '╣', '╚', '╩', '╝', '⇔', '❏','┏',
-    /* 110 */ '┳', '┓', '┣', '┫', '┗', '┻', '┛',
+    /* 100 */ '中', '重', '必', '殺', '武', '╔', '╦', '╗', '╠', '╣', '╚', '╩', '╝', '⇔', '❏', '╭',
+    /* 110 */ '╮', '╰', '╯', '┏','┳', '┓', '┣', '┫', '┗', '┻', '┛',
 ];
 
 #[rustfmt::skip]

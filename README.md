@@ -27,7 +27,7 @@ $ fe3-text <file> decompile list [-s <start offset>] -e <end offset>
 ```console
 $ fe3-text <file> compile list -o <output>
 ```
-`file` is a text file with one string per line, the first "word" is the label.
+`file` is a JSON file with keys being the labels and values being the strings. (the order is preserved)
 
 ## TODO
 
