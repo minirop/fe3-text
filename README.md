@@ -27,10 +27,9 @@ $ fe3-text <file> decompile list [-s <start offset>] -e <end offset>
 ```console
 $ fe3-text <file> compile list -o <output>
 ```
-`file` is a text file with one string per line.
+`file` is a text file with one string per line, the first "word" is the label.
 
 ## TODO
 
 - Understand the unknown commands.
 - Move the mapping into a config file.
-- Compile lists into assembly files with labels, instead of binary files.
