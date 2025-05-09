@@ -31,6 +31,6 @@ $ fe3-text <file> compile list -o <output>
 
 ## TODO
 
-- Not all kanjis have been mapped, so most will show up as as a full stop.
 - Understand the unknown commands.
 - Move the mapping into a config file.
+- Compile lists into assembly files with labels, instead of binary files.

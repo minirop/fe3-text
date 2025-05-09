@@ -187,7 +187,7 @@ fn decompile_dialogue(filename: &str, offset: u64) -> Result<(), Box<dyn std::er
         } else {
             let mut character = id;
             while character != 0 {
-                let c = CHARACTERS[page][character as usize];
+                let c = DIALOGUES_CHARACTERS[page][character as usize];
                 if c == '_' {
                     print!(" {:02X}/{:02X} ", page + 0x11, character);
                 } else {
@@ -210,10 +210,10 @@ fn compile_dialogue(filename: &str, output: &str) -> Result<(), Box<dyn std::err
     let mut file = File::create(output)?;
     let script = script.chars().collect::<Vec<_>>();
     let mut index = 0;
-    let mut current_page = 99;
+    let mut current_page = 0;
     while index < script.len() {
         if script[index] == '[' {
-            current_page = 99; // reset to invalid page
+            current_page = 0; // reset to default page
             file.write_u8(0)?;
 
             let mut end_index = index + 1;
@@ -360,8 +360,9 @@ fn compile_dialogue(filename: &str, output: &str) -> Result<(), Box<dyn std::err
                 // do nothing for now
             } else {
                 for page in 0..4 {
-                    if let Some(id) = CHARACTERS[page].iter().position(|&r| r == c) {
+                    if let Some(id) = DIALOGUES_CHARACTERS[page].iter().position(|&r| r == c) {
                         if current_page != page {
+                            file.write_u8(0x00)?;
                             file.write_u8(page as u8 + 0x11)?;
                             current_page = page;
                         }
@@ -401,11 +402,12 @@ fn print_array_of_strings(
 
     let mut cursor = Cursor::new(buffer);
     while let Ok(data) = cursor.read_u16::<LittleEndian>() {
-        if data == 0xFFFF {
+        if data == 0xFFFF || data == 0xFFFE || data == 0xFFFD {
             println!();
         } else {
-            let c = CHARACTERS[0][data as usize + 1];
-            let c = if c == ' ' { 'ー' } else { c };
+            let index = data as usize;
+            assert!(index < 256);
+            let c = LISTS_CHARACTERS[index];
             print!("{c}");
         }
     }
@@ -418,16 +420,11 @@ fn compile_array_of_string(filename: &str, output: &str) -> Result<(), Box<dyn s
 
     let mut output_file = File::create(output)?;
 
-    let cs = &CHARACTERS[0];
     for string in strings.split("\n") {
         if string.len() > 0 {
             for c in string.chars() {
-                let index = if c == 'ー' {
-                    0xC4
-                } else {
-                    cs.iter().position(|&r| r == c).unwrap()
-                };
-                output_file.write_u16::<LittleEndian>((index - 1) as u16)?;
+                let index = LISTS_CHARACTERS.iter().position(|&r| r == c).unwrap();
+                output_file.write_u16::<LittleEndian>(index as u16)?;
             }
             output_file.write_u16::<LittleEndian>(0xFFFF)?;
         }
@@ -437,13 +434,33 @@ fn compile_array_of_string(filename: &str, output: &str) -> Result<(), Box<dyn s
 }
 
 #[rustfmt::skip]
-const CHARACTERS: [[char; 256]; 4] = [
+const LISTS_CHARACTERS: [char; 256] = [
+    /* 00 */ 'あ', 'い', 'う', 'え', 'お', 'か', 'き', 'く', 'け', 'こ', 'さ', 'し', 'す', 'せ', 'そ', 'た',
+    /* 10 */ 'ち', 'つ', 'て', 'と', 'な', 'に', 'ぬ', 'ね', 'の', 'は', 'ひ', 'ふ', 'へ', 'ほ', 'ま', 'み',
+    /* 20 */ 'む', 'め', 'も', 'や', 'ゆ', 'よ', 'ら', 'り', 'る', 'れ', 'ろ', 'わ', 'を', 'ん', 'が', 'ぎ',
+    /* 30 */ 'ぐ', 'げ', 'ご', 'ざ', 'じ', 'ず', 'ぜ', 'ぞ', 'だ', 'ぢ', 'づ', 'で', 'ど', 'ば', 'び', 'ぶ',
+    /* 40 */ 'べ', 'ぼ', 'ぱ', 'ぴ', 'ぷ', 'ぺ', 'ぽ', '_', '_', '_', '_', '_', 'ゃ', 'っ', 'ゅ', 'ょ',
+    /* 50 */ 'ア', 'イ', 'ウ', 'エ', 'オ', 'カ', 'キ', 'ク', 'ケ', 'コ', 'サ', 'シ', 'ス', 'セ', 'ソ', 'タ',
+    /* 60 */ 'チ', 'ツ', 'テ', 'ト', 'ナ', 'ニ', 'ヌ', 'ネ', 'ノ', 'ハ', 'ヒ', 'フ', 'ヘ', 'ホ', 'マ', 'ミ',
+    /* 70 */ 'ム', 'メ', 'モ', 'ヤ', 'ユ', 'ヨ', 'ラ', 'リ', 'ル', 'レ', 'ロ', 'ワ', 'ン', 'ガ', 'ギ', 'グ',
+    /* 80 */ 'ゲ', 'ゴ', 'ザ', 'ジ', 'ズ', 'ゼ', 'ゾ', 'ダ', 'ヂ', 'ヅ', 'デ', 'ド', 'バ', 'ビ', 'ブ', 'ベ',
+    /* 90 */ 'ボ', 'パ', 'ピ', 'プ', 'ペ', 'ポ', 'ァ', 'ィ', 'ゥ', 'ェ', 'ォ', 'ャ', 'ッ', 'ュ', 'ョ', '０',
+    /* A0 */ '１', '２', '３', '４', '５', '６', '７', '８', '９', 'Ｈ', 'Ｐ', 'Ｌ', 'Ｖ', '@' /*EXのE*/, 'µ' /*EXのX*/, 'Ｍ',
+    /* B0 */ '／', 'Ｄ', 'Ｒ', '店', 'Ｙ', 'Ｎ', 'Ｅ', 'Ｓ', 'Ａ', 'Ｗ', '％', 'Ｘ', '「', '」', '＿', '・',
+    /* C0 */ '（', '）', ' ', 'ー', '！', '兵', '書', '石', '竜', '杖', '星', '特', '輸', '送', '隊', '状',
+    /* D0 */ '況', '終', '断', '話', '門', '道', '魔', '運', '所', '持', '品', '捨', '交', '換', '預', '闘',
+    /* E0 */ '技', '場', '防', '城', '装', '使', '用', '攻', '撃', '速', '守', '備', '効', '幸', '第', '章',
+    /* F0 */ 'Ｔ', 'Ｏ', '部', '騎', '＋', '宝', '箱', 'Ｂ', '器', '回', '復', '系', '？', '士', '：', '命',
+];
+
+#[rustfmt::skip]
+const DIALOGUES_CHARACTERS: [[char; 256]; 4] = [
     [   // 11
         /* 00 */ 'X', 'あ', 'い', 'う', 'え', 'お', 'か', 'き', 'く', 'け', 'こ', 'さ', 'し', 'す', 'せ', 'そ',
         /* 10 */ 'た', 'ち', 'つ', 'て', 'と', 'な', 'に', 'ぬ', 'ね', 'の', 'は', 'ひ', 'ふ', 'へ', 'ほ', 'ま',
         /* 20 */ 'み', 'む', 'め', 'も', 'や', 'ゆ', 'よ', 'ら', 'り', 'る', 'れ', 'ろ', 'わ', 'を', 'ん', 'が',
         /* 30 */ 'ぎ', 'ぐ', 'げ', 'ご', 'ざ', 'じ', 'ず', 'ぜ', 'ぞ', 'だ', 'ぢ', 'づ', 'で', 'ど', 'ば', 'び',
-        /* 40 */ 'ぶ', 'べ', 'ぼ', 'ぱ', 'ぴ', '_', '_', '_', 'ぁ', 'ぃ', '_', 'ぇ', 'ぉ', 'ゃ', 'っ', 'ゅ',
+        /* 40 */ 'ぶ', 'べ', 'ぼ', 'ぱ', 'ぴ', 'ぷ', 'ぺ', 'ぽ', 'ぁ', 'ぃ', '_', 'ぇ', 'ぉ', 'ゃ', 'っ', 'ゅ',
         /* 50 */ 'ょ', 'ア', 'イ', 'ウ', 'エ', 'オ', 'カ', 'キ', 'ク', 'ケ', 'コ', 'サ', 'シ', 'ス', 'セ', 'ソ',
         /* 60 */ 'タ', 'チ', 'ツ', 'テ', 'ト', 'ナ', 'ニ', 'ヌ', 'ネ', 'ノ', 'ハ', 'ヒ', 'フ', 'ヘ', 'ホ', 'マ',
         /* 70 */ 'ミ', 'ム', 'メ', 'モ', 'ヤ', 'ユ', 'ヨ', 'ラ', 'リ', 'ル', 'レ', 'ロ', 'ワ', 'ン', 'ガ', 'ギ',
