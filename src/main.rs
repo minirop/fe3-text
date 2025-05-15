@@ -76,6 +76,7 @@ fn decompile_dialogue(filename: &str, offset: u64) -> Result<(), Box<dyn std::er
     let mut rom = File::open(filename)?;
     rom.seek(SeekFrom::Start(offset))?;
 
+    let mut missing = false;
     let mut page = 0;
     loop {
         let id = rom.read_u8()?;
@@ -94,7 +95,15 @@ fn decompile_dialogue(filename: &str, offset: u64) -> Result<(), Box<dyn std::er
                     let zero = rom.read_u8()?;
                     assert_eq!(zero, 0);
                     let colour = rom.read_u8()?;
-                    print!("[SetColor({colour:#X})]");
+                    let colour = match colour {
+                        0x20 => "Brown",
+                        0x24 => "White",
+                        0x28 => "Yellow",
+                        0x2C => "Green",
+                        _ => panic!("Unknown colour: {colour:#02X}"),
+                    };
+
+                    print!("[SetColor({colour})]");
                 }
                 0x0C => {
                     let other = rom.read_u8()?;
@@ -110,9 +119,10 @@ fn decompile_dialogue(filename: &str, offset: u64) -> Result<(), Box<dyn std::er
                 0x16 => {
                     let ten = rom.read_u8()?;
                     assert_eq!(ten, 0x10);
-                    let other = rom.read_u8()?;
-                    // other = 0 but 1 '1'
-                    println!("[Unknown16({other})]");
+                    let zero = rom.read_u8()?;
+                    assert_eq!(zero, 0);
+
+                    println!("[Unknown16]");
                 }
                 0x17 => {
                     let ef = rom.read_u8()?;
@@ -129,19 +139,53 @@ fn decompile_dialogue(filename: &str, offset: u64) -> Result<(), Box<dyn std::er
                     let flags = rom.read_u8()?;
                     let portrait = PORTRAITS[portrait as usize];
 
-                    println!("[ShowPortrait({portrait}, {flags})]");
+                    if portrait.starts_with("Unknown") {
+                        print!("\x1b[93m");
+                        missing = true;
+                    }
+
+                    let position = match flags & 0b11 {
+                        0b00 => "TopLeft",
+                        0b01 => "TopRight",
+                        0b10 => "BottomLeft",
+                        0b11 => "BottomRight",
+                        _ => unreachable!(),
+                    };
+                    let flags = flags >> 2;
+
+                    println!("[ShowPortrait({portrait}, {position}, {flags:#02X})]");
+
+                    if portrait.starts_with("Unknown") {
+                        print!("\x1b[0m");
+                    }
                 }
                 0x85 => {
-                    let frame = rom.read_u8()?;
+                    let flags = rom.read_u8()?;
 
-                    println!("[CloseFrame({frame})]");
+                    let position = match flags & 0b11 {
+                        0b00 => "TopLeft",
+                        0b01 => "TopRight",
+                        0b10 => "BottomLeft",
+                        0b11 => "BottomRight",
+                        _ => unreachable!(),
+                    };
+                    let flags = flags >> 2;
+
+                    println!("[CloseFrame({position}, {flags:#02X})]");
                 }
                 0x86 => println!("[Unknown86]"),
                 0x87 => println!("[Unknown87]"),
                 0x88 => {
-                    let unknown = rom.read_u8()?;
+                    let kind = rom.read_u8()?;
+                    let kind = match kind {
+                        0x00 => "Default",
+                        0x03 => "Ending",
+                        0x04 => "Village",
+                        // 0x06 => "Shop", ?
+                        _ => panic!("Unknown dialogue kind: {kind:02X}"),
+                    };
 
-                    println!("[StartDialogue({unknown:#X})]");
+                    println!("[StartDialogue({kind})]");
                 }
                 0x89 => {
                     let song = rom.read_u8()?;
@@ -165,24 +209,34 @@ fn decompile_dialogue(filename: &str, offset: u64) -> Result<(), Box<dyn std::er
                     println!("[Unknown8E({unk1}, {unk2})]");
                 }
                 0x8F => {
-                    let unk = rom.read_u8()?;
-                    println!("[Unknown8F({unk:#X})]");
+                    let speed = rom.read_u8()?;
+                    let speed = match speed {
+                        0x84 => "Fast",
+                        0x89 => "Slow",
+                        _ => panic!("Unknown speed: {speed:#02X}"),
+                    };
+                    println!("[ChangeTextSpeed({speed})]");
                 }
                 0x90 => println!("[Unknown90]"),
                 0x91 => println!("[Unknown91]"),
                 0x92 => {
-                    let frame = rom.read_u8()?;
+                    let position = rom.read_u8()?;
+                    let position = match position {
+                        0x00 => "Top",
+                        0x01 => "Bottom",
+                        _ => panic!("Unknown position: {position:#02X}"),
+                    };
 
-                    println!("[SwitchFrame({frame})]");
+                    println!("[SwitchFrame({position})]");
                 }
                 0x93 => println!("[Unknown93]"),
                 0x94 => {
-                    let unk = rom.read_u16::<LittleEndian>()?;
-                    println!("[Unknown94({unk:#X})]");
+                    let frames = rom.read_u16::<LittleEndian>()?;
+                    println!("[TimedWaitForA({frames})]");
                 }
                 0x95 => println!("[Unknown95]"),
                 _ => panic!(
-                    "Unknown command {command:#X} at index {:#X}",
+                    "Unknown command {command:#02X} at index {:#X}",
                     rom.seek(SeekFrom::Current(0))?
                 ),
             }
@@ -191,7 +245,8 @@ fn decompile_dialogue(filename: &str, offset: u64) -> Result<(), Box<dyn std::er
             while character != 0 {
                 let c = DIALOGUES_CHARACTERS[page][character as usize];
                 if c == '_' {
-                    print!(" {:02X}/{:02X} ", page + 0x11, character);
+                    missing = true;
+                    print!(" \x1b[93m{:02X}/{:02X}\x1b[0m ", page + 0x11, character);
                 } else {
                     print!("{c}");
                 }
@@ -202,6 +257,9 @@ fn decompile_dialogue(filename: &str, offset: u64) -> Result<(), Box<dyn std::er
         }
     }
 
+    if missing {
+        todo!();
+    }
 
     Ok(())
 }
@@ -252,13 +310,32 @@ fn compile_dialogue(filename: &str, output: &str) -> Result<(), Box<dyn std::err
                 "End" => file.write_u8(0x00)?,
                 "ClearFrame" => file.write_u8(0x02)?,
                 "Unknown05" => file.write_u8(0x05)?,
+                "SetColor" => {
+                    assert_eq!(args.len(), 1);
+
+                    file.write_u8(0x07)?;
+                    file.write_u8(0x00)?;
+
+                    let colour = match args[0].as_str() {
+                        "Brown" => 0x20,
+                        "White" => 0x24,
+                        "Yellow" => 0x28,
+                        "Green" => 0x2C,
+                        _ => panic!("Invalid colour {}", args[0]),
+                    };
+                    file.write_u8(colour)?;
+                }
                 "Unknown0C" => {
+                    assert_eq!(args.len(), 1);
+
                     file.write_u8(0x0C)?;
 
                     let unk = maybe_hex::<u8>(&args[0]).unwrap();
                     file.write_u8(unk)?;
                 }
                 "Unknown10" => {
+                    assert_eq!(args.len(), 3);
+
                     file.write_u8(0x10)?;
 
                     let unk1 = maybe_hex::<u8>(&args[0]).unwrap();
@@ -269,11 +346,13 @@ fn compile_dialogue(filename: &str, output: &str) -> Result<(), Box<dyn std::err
                     file.write_u8(unk3)?;
                 }
                 "Unknown16" => {
+                    assert_eq!(args.len(), 1);
+
                     file.write_u8(0x16)?;
 
                     file.write_u8(0x10)?;
-                    let unk = maybe_hex::<u8>(&args[0]).unwrap();
-                    file.write_u8(unk)?;
+                    //let unk = maybe_hex::<u8>(&args[0]).unwrap();
+                    file.write_u8(0x00)?;
                 }
                 "Unknown17" => {
                     file.write_u8(0x17)?;
@@ -281,13 +360,67 @@ fn compile_dialogue(filename: &str, output: &str) -> Result<(), Box<dyn std::err
                     file.write_u8(0xEF)?;
                     file.write_u8(0xFF)?;
                 }
+                "Unknown80" => file.write_u8(0x80)?,
+                "Unknown81" => file.write_u8(0x81)?,
+                "ShowPortrait" => {
+                    assert_eq!(args.len(), 3);
+
+                    file.write_u8(0x84)?;
+
+                    let portrait_id = PORTRAITS.iter().position(|c| c == &args[0]).unwrap();
+                    let position = &args[0];
+                    let flags = maybe_hex::<u8>(&args[1]).unwrap() << 2;
+                    let flags = flags
+                        + match position.as_str() {
+                            "TopLeft" => 0b00,
+                            "TopRight" => 0b01,
+                            "BottomLeft" => 0b10,
+                            "BottomRight" => 0b11,
+                            _ => panic!("Invalid position {position}"),
+                        };
+
+                    file.write_u8(portrait_id as u8)?;
+                    file.write_u8(flags)?;
+                }
+                "CloseFrame" => {
+                    assert_eq!(args.len(), 2);
+
+                    file.write_u8(0x85)?;
+
+                    let position = &args[0];
+                    let flags = maybe_hex::<u8>(&args[1]).unwrap() << 2;
+                    let flags = flags
+                        + match position.as_str() {
+                            "TopLeft" => 0b00,
+                            "TopRight" => 0b01,
+                            "BottomLeft" => 0b10,
+                            "BottomRight" => 0b11,
+                            _ => panic!("Invalid position {position}"),
+                        };
+
+                    file.write_u8(flags)?;
+                }
+                "Unknown86" => file.write_u8(0x86)?,
+                "Unknown87" => file.write_u8(0x87)?,
                 "StartDialogue" => {
+                    assert_eq!(args.len(), 1);
+
                     file.write_u8(0x88)?;
 
-                    let unk = maybe_hex::<u8>(&args[0]).unwrap();
-                    file.write_u8(unk)?;
+                    let kind = &args[0];
+                    let kind = match kind.as_str() {
+                        "Default" => 0x00,
+                        "Ending" => 0x03,
+                        "Village" => 0x04,
+                        // "Shop" => 0x06, ?
+                        _ => panic!("Unknown dialogue kind: {kind}"),
+                    };
+
+                    file.write_u8(kind)?;
                 }
                 "PlaySong" => {
+                    assert_eq!(args.len(), 2);
+
                     file.write_u8(0x89)?;
 
                     let song = maybe_hex::<u8>(&args[0]).unwrap();
@@ -295,27 +428,12 @@ fn compile_dialogue(filename: &str, output: &str) -> Result<(), Box<dyn std::err
                     file.write_u8(song)?;
                     file.write_u8(volume)?;
                 }
-                "Unknown80" => file.write_u8(0x80)?,
-                "Unknown81" => file.write_u8(0x81)?,
-                "ShowPortrait" => {
-                    file.write_u8(0x84)?;
-
-                    let portrait_id = PORTRAITS.iter().position(|c| c == &args[0]).unwrap();
-                    let flags = maybe_hex::<u8>(&args[1]).unwrap();
-
-                    file.write_u8(portrait_id as u8)?;
-                    file.write_u8(flags)?;
-                }
-                "CloseFrame" => {
-                    file.write_u8(0x85)?;
-
-                    let id = maybe_hex::<u8>(&args[0]).unwrap();
-                    file.write_u8(id)?;
-                }
                 "WaitForA" => file.write_u8(0x8A)?,
                 "Unknown8B" => file.write_u8(0x8B)?,
                 "Unknown8C" => file.write_u8(0x8C)?,
                 "Unknown8D" => {
+                    assert_eq!(args.len(), 2);
+
                     file.write_u8(0x8D)?;
 
                     let unk1 = maybe_hex::<u8>(&args[0]).unwrap();
@@ -324,6 +442,8 @@ fn compile_dialogue(filename: &str, output: &str) -> Result<(), Box<dyn std::err
                     file.write_u8(unk2)?;
                 }
                 "Unknown8E" => {
+                    assert_eq!(args.len(), 2);
+
                     file.write_u8(0x8E)?;
 
                     let unk1 = maybe_hex::<u8>(&args[0]).unwrap();
@@ -331,29 +451,36 @@ fn compile_dialogue(filename: &str, output: &str) -> Result<(), Box<dyn std::err
                     file.write_u8(unk1)?;
                     file.write_u8(unk2)?;
                 }
-                "Unknown8F" => {
+                "ChangeTextSpeed" => {
+                    assert_eq!(args.len(), 1);
+
                     file.write_u8(0x8F)?;
 
-                    let unk = maybe_hex::<u8>(&args[0]).unwrap();
-                    file.write_u8(unk)?;
+                    let speed = &args[0];
+                    let speed = match speed.as_str() {
+                        "Fast" => 0x84,
+                        "Slow" => 0x89,
+                        _ => panic!("Unknown speed: {speed}"),
+                    };
+                    file.write_u8(speed)?;
                 }
                 "Unknown90" => file.write_u8(0x90)?,
                 "Unknown91" => file.write_u8(0x91)?,
                 "SwitchFrame" => {
+                    assert_eq!(args.len(), 1);
+
                     file.write_u8(0x92)?;
 
-                    let id = maybe_hex::<u8>(&args[0]).unwrap();
-                    file.write_u8(id)?;
+                    let position = &args[0];
+                    let position = match position.as_str() {
+                        "Top" => 0x00,
+                        "Bottom" => 0x01,
+                        _ => panic!("Unknown position: {position}"),
+                    };
+                    file.write_u8(position)?;
                 }
                 "Unknown93" => file.write_u8(0x93)?,
                 "Unknown95" => file.write_u8(0x95)?,
-                "SetColor" => {
-                    file.write_u8(0x07)?;
-                    file.write_u8(0x00)?;
-
-                    let colour = maybe_hex::<u8>(&args[0]).unwrap();
-                    file.write_u8(colour)?;
-                }
                 _ => panic!("{command}"),
             }
         } else {
@@ -403,9 +530,11 @@ fn print_array_of_strings(
     rom.read(&mut buffer)?;
 
     let mut cursor = Cursor::new(buffer);
+    print!("\"");
     while let Ok(data) = cursor.read_u16::<LittleEndian>() {
         if data == 0xFFFF {
-            println!();
+            println!("\"");
+            print!("\"");
         } else if data == 0xFFFE {
             print!("\\r"); // "line break storage/memory"?
         } else if data == 0xFFFD {
@@ -510,22 +639,22 @@ const DIALOGUES_CHARACTERS: [[char; 256]; 4] = [
         /* B0 */ '受', '_', '誇', '滅', '亡', '古', '高', '度', '絶', '動', '塔', '司', '祭', '失', '追', '込',
         /* C0 */ '包', '囲', '所', '突', '散', '残', '選', '命', '_', '歩', '盗', '港', '＜', '＞', '心', '着',
         /* D0 */ '生', '足', '移', '文', '明', '望', '時', '平', '和', '支', '配', '激', '界', '秘', '野', '乱',
-        /* E0 */ '域', '_', '_', '_', '打', '倒', '、', '_', '死', '槍', '弓', '斧', '民', '位', '先', '利',
+        /* E0 */ '域', '_', '_', '_', '打', '倒', '、', '。', '死', '槍', '弓', '斧', '民', '位', '先', '利',
         /* F0 */ '兄', '氷', '信', '真', '正', '義', '忠', '誠', '臣', '婚', '礼', '_', '伯', '伝', '説', '炎',
     ],
     [   // 13
         /* 00 */ '_', '紋', '章', '_', '反', '断', '_', '_', '初', '_', '消', '第', '町', '隷', '天', '空',
         /* 10 */ '_', '遠', '征', '連', '去', '嘆', '_', '_', '墓', '_', '再', '奪', '回', '_', '帰', '_',
         /* 20 */ '壇', '制', '圧', '病', '終', '_', '相', '商', '勝', '負', '続', '_', '_', '_', '賞', '_',
-        /* 30 */ '然', '異', '壊', '護', '熱', '識', '_', '装', '西', '妹', '安', '貨', '侵', '玉', '座', '準',
+        /* 30 */ '然', '異', '壊', '護', '熱', '識', '各', '装', '西', '妹', '安', '貨', '侵', '玉', '座', '準',
         /* 40 */ '鉄', '銀', '屋', '百', '封', '印', '盾', '電', '間', '橋', '_', '脱', '防', '壮', '冷', '昔',
         /* 50 */ '途', '官', '_', '狂', '_', '希', '重', '栄', '発', '_', '語', '呋', '体', '令', '精', '鋭',
         /* 60 */ '邪', '協', '接', '完', '政', '緒', '節', '砂', '漠', '灼', '太', '陽', '当', '党', '本', '能',
         /* 70 */ '少', '作', '幸', '理', '新', '夫', '逃', '略', '不', '永', '参', '惨', '七', '減', '成', '共',
         /* 80 */ '訪', '_', '感', '与', '挟', '長', '具', '担', '急', '由', '耳', '産', '_', '_', '超', '仲',
         /* 90 */ '変', '務', '償', '売', '買', '声', '教', '恋', '員', '服', '修', '屈', '注', '巨', '情', '馬',
-        /* A0 */ '_', '森', '得', '_', '軽', '経', '験', '_', '格', '_', '有', '若', '涙', '効', '特', '殊',
-        /* B0 */ '離', '在', '存', '呪', '_', '仕', '_', '興', '蛮', '神', '外', '抗', '抵', '処', '刑', '_',
+        /* A0 */ '徒', '森', '得', '機', '軽', '経', '験', '昇', '格', '扱', '有', '若', '涙', '効', '特', '殊',
+        /* B0 */ '離', '在', '存', '呪', '_', '仕', '御', '興', '蛮', '神', '外', '抗', '抵', '処', '刑', '_',
         /* C0 */ '陛', '獄', '可', '個', '室', '危', '択', '結', '引', '_', '旗', '密', '_', '_', '_', '赤',
         /* D0 */ '短', '乗', '_', '_', '_', '逆', '派', '遣', '_', '踊', '迷', '_', '学', '勉', '伐', '_',
         /* E0 */ '限', '議', '_', '_', '果', '保', '害', '期', '_', '_', '岩', '別', '想', '_', '_', '_',
