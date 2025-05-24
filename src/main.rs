@@ -480,6 +480,14 @@ fn compile_dialogue(filename: &str, output: &str) -> Result<(), Box<dyn std::err
                     file.write_u8(position)?;
                 }
                 "Unknown93" => file.write_u8(0x93)?,
+                "TimedWaitForA" => {
+                    assert_eq!(args.len(), 1);
+
+                    let frames = maybe_hex::<u8>(&args[0]).unwrap();
+
+                    file.write_u8(0x94)?;
+                    file.write_u16::<LittleEndian>(frames as u16)?;
+                }
                 "Unknown95" => file.write_u8(0x95)?,
                 _ => panic!("{command}"),
             }
@@ -549,6 +557,7 @@ fn print_array_of_strings(
             print!("{c}");
         }
     }
+    print!("\"");
 
     Ok(())
 }
