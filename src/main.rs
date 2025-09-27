@@ -7,8 +7,8 @@ use clap::Parser;
 use clap::Subcommand;
 use clap_num::maybe_hex;
 use indexmap::IndexMap;
-use std::fs::File;
 use std::fs::read_to_string;
+use std::fs::File;
 use std::io::Cursor;
 use std::io::Read;
 use std::io::Seek;
@@ -134,6 +134,7 @@ fn decompile_dialogue(filename: &str, offset: u64) -> Result<(), Box<dyn std::er
                 }
                 0x80 => println!("[Unknown80]"),
                 0x81 => println!("[Unknown81]"),
+                0x82 => println!("[Unknown82]"),
                 0x84 => {
                     let portrait = rom.read_u8()?;
                     let flags = rom.read_u8()?;
@@ -181,7 +182,7 @@ fn decompile_dialogue(filename: &str, offset: u64) -> Result<(), Box<dyn std::er
                         0x00 => "Default",
                         0x03 => "Ending",
                         0x04 => "Village",
-                        // 0x06 => "Shop", ?
+                        0x06 => "Shop",
                         _ => panic!("Unknown dialogue kind: {kind:02X}"),
                     };
 
@@ -362,6 +363,7 @@ fn compile_dialogue(filename: &str, output: &str) -> Result<(), Box<dyn std::err
                 }
                 "Unknown80" => file.write_u8(0x80)?,
                 "Unknown81" => file.write_u8(0x81)?,
+                "Unknown82" => file.write_u8(0x82)?,
                 "ShowPortrait" => {
                     assert_eq!(args.len(), 3);
 
@@ -412,7 +414,7 @@ fn compile_dialogue(filename: &str, output: &str) -> Result<(), Box<dyn std::err
                         "Default" => 0x00,
                         "Ending" => 0x03,
                         "Village" => 0x04,
-                        // "Shop" => 0x06, ?
+                        "Shop" => 0x06,
                         _ => panic!("Unknown dialogue kind: {kind}"),
                     };
 
@@ -429,7 +431,10 @@ fn compile_dialogue(filename: &str, output: &str) -> Result<(), Box<dyn std::err
                     file.write_u8(volume)?;
                 }
                 "WaitForA" => file.write_u8(0x8A)?,
-                "Unknown8B" => file.write_u8(0x8B)?,
+                "Unknown8B" => {
+                    current_page = 99;
+                    file.write_u8(0x8B)?
+                }
                 "Unknown8C" => file.write_u8(0x8C)?,
                 "Unknown8D" => {
                     assert_eq!(args.len(), 2);
@@ -654,7 +659,7 @@ const DIALOGUES_CHARACTERS: [[char; 256]; 4] = [
     [   // 13
         /* 00 */ '_', '紋', '章', '_', '反', '断', '_', '_', '初', '_', '消', '第', '町', '隷', '天', '空',
         /* 10 */ '_', '遠', '征', '連', '去', '嘆', '_', '_', '墓', '_', '再', '奪', '回', '_', '帰', '_',
-        /* 20 */ '壇', '制', '圧', '病', '終', '_', '相', '商', '勝', '負', '続', '_', '_', '_', '賞', '_',
+        /* 20 */ '壇', '制', '圧', '病', '終', '_', '相', '商', '勝', '負', '続', '表', '示', 'B', '賞', '_',
         /* 30 */ '然', '異', '壊', '護', '熱', '識', '各', '装', '西', '妹', '安', '貨', '侵', '玉', '座', '準',
         /* 40 */ '鉄', '銀', '屋', '百', '封', '印', '盾', '電', '間', '橋', '_', '脱', '防', '壮', '冷', '昔',
         /* 50 */ '途', '官', '_', '狂', '_', '希', '重', '栄', '発', '_', '語', '呋', '体', '令', '精', '鋭',
