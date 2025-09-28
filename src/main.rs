@@ -274,7 +274,6 @@ fn compile_dialogue(filename: &str, output: &str) -> Result<(), Box<dyn std::err
     let mut current_page = 0;
     while index < script.len() {
         if script[index] == '[' {
-            current_page = 0; // reset to default page
             file.write_u8(0)?;
 
             let mut end_index = index + 1;
@@ -290,7 +289,14 @@ fn compile_dialogue(filename: &str, output: &str) -> Result<(), Box<dyn std::err
                 index += 1;
                 end_index = index;
 
-                while end_index < script.len() && script[end_index] != ')' {
+                let mut depth = 0;
+                while end_index < script.len() && (script[end_index] != ')' || depth > 0) {
+                    if script[end_index] == '(' {
+                        depth += 1;
+                    }
+                    if script[end_index] == ')' {
+                        depth -= 1;
+                    }
                     end_index += 1;
                 }
 
@@ -347,12 +353,9 @@ fn compile_dialogue(filename: &str, output: &str) -> Result<(), Box<dyn std::err
                     file.write_u8(unk3)?;
                 }
                 "Unknown16" => {
-                    assert_eq!(args.len(), 1);
-
                     file.write_u8(0x16)?;
 
                     file.write_u8(0x10)?;
-                    //let unk = maybe_hex::<u8>(&args[0]).unwrap();
                     file.write_u8(0x00)?;
                 }
                 "Unknown17" => {
@@ -370,8 +373,8 @@ fn compile_dialogue(filename: &str, output: &str) -> Result<(), Box<dyn std::err
                     file.write_u8(0x84)?;
 
                     let portrait_id = PORTRAITS.iter().position(|c| c == &args[0]).unwrap();
-                    let position = &args[0];
-                    let flags = maybe_hex::<u8>(&args[1]).unwrap() << 2;
+                    let position = &args[1];
+                    let flags = maybe_hex::<u8>(&args[2]).unwrap() << 2;
                     let flags = flags
                         + match position.as_str() {
                             "TopLeft" => 0b00,
@@ -488,10 +491,10 @@ fn compile_dialogue(filename: &str, output: &str) -> Result<(), Box<dyn std::err
                 "TimedWaitForA" => {
                     assert_eq!(args.len(), 1);
 
-                    let frames = maybe_hex::<u8>(&args[0]).unwrap();
+                    let frames = maybe_hex::<u16>(&args[0]).unwrap();
 
                     file.write_u8(0x94)?;
-                    file.write_u16::<LittleEndian>(frames as u16)?;
+                    file.write_u16::<LittleEndian>(frames)?;
                 }
                 "Unknown95" => file.write_u8(0x95)?,
                 _ => panic!("{command}"),
@@ -636,7 +639,7 @@ const DIALOGUES_CHARACTERS: [[char; 256]; 4] = [
         /* C0 */ '「', '」', '（', '）', ' ', '！', '攻', '撃', '力', '守', '備', '魔', '竜', '石', '団', '闘',
         /* D0 */ '技', '場', '店', '必', '殺', '一', '道', '書', '杖', '系', 'Ｍ', '星', '話', '兵', '士', '使',
         /* E0 */ '用', '運', '_', '法', '軍', '白', '火', '飛', '地', '暗', '黒', '進', '城', '海', '人', '騎',
-        /* F0 */ '.', '王', '子', '女', '様', '父', '行', '戦', '来', '・', '母', '山', '集', 'ー', '剣', '国',
+        /* F0 */ '.', '王', '子', '女', '様', '父', '行', '戦', '来', '・', '母', '山', '集', '♥', '剣', '国',
     ],
     [   // 12
         /* 00 */ '_', '待', '祖', '老', '東', '方', '辺', '境', '小', '援', '助', '_', '親', '討', '身', '愛',
@@ -668,17 +671,17 @@ const DIALOGUES_CHARACTERS: [[char; 256]; 4] = [
         /* 80 */ '訪', '_', '感', '与', '挟', '長', '具', '担', '急', '由', '耳', '産', '_', '_', '超', '仲',
         /* 90 */ '変', '務', '償', '売', '買', '声', '教', '恋', '員', '服', '修', '屈', '注', '巨', '情', '馬',
         /* A0 */ '徒', '森', '得', '機', '軽', '経', '験', '昇', '格', '扱', '有', '若', '涙', '効', '特', '殊',
-        /* B0 */ '離', '在', '存', '呪', '_', '仕', '御', '興', '蛮', '神', '外', '抗', '抵', '処', '刑', '_',
+        /* B0 */ '離', '在', '存', '呪', '_', '仕', '御', '興', '蛮', '化', '外', '抗', '抵', '処', '刑', '_',
         /* C0 */ '陛', '獄', '可', '個', '室', '危', '択', '結', '引', '_', '旗', '密', '_', '_', '_', '赤',
         /* D0 */ '短', '乗', '_', '_', '_', '逆', '派', '遣', '_', '踊', '迷', '_', '学', '勉', '伐', '_',
         /* E0 */ '限', '議', '_', '_', '果', '保', '害', '期', '_', '_', '岩', '別', '想', '_', '_', '_',
         /* F0 */ '_', '_', '_', '_', '_', '衛', '息', '類', '_', '実', '_', '非', '術', '_', '鋼', '継',
     ],
     [   // 14
-        /* 00 */ '_', '承', '_', '_', '増', '_', '_', '_', '_', '風', '混', '_', '_', '_', '_', '定',
-        /* 10 */ '_', '戻', '請', '_', '_', '任', '残', '忘', '涯', '_', '頼', '姿', '_', '遊', '_', '_',
+        /* 00 */ '_', '承', '_', '_', '増', '_', '_', '_', '_', '風', '_', '_', '_', '_', '_', '定',
+        /* 10 */ '_', '戻', '請', '_', '_', '任', '念', '忘', '涯', '_', '頼', '姿', '_', '遊', '_', '_',
         /* 20 */ '良', '_', '_', '師', '捨', '_', '託', '娘', '告', '_', '予', '_', '努', '焼', '役', '仮',
-        /* 30 */ '面', '安', '我', '堂', '腕', '_', '_', '業', '五', '_', '_', '_', '_', '_', '応', '_',
+        /* 30 */ '面', '暮', '我', '堂', '腕', '_', '_', '業', '五', '_', '_', '_', '_', '_', '応', '_',
         /* 40 */ '_', '_', '_', '_', '_', '_', '_', '報', '皆', '払', '混', '双', '口', '降', '伏', '_',
         /* 50 */ '_', '幅', '悔', '毎', '牢', '肉', '到', '_', '妃', '_', '迫', '求', '職', '魂', '紙', '_',
         /* 60 */ '通', '供', '許', '局', '送', '絡', '孫', '扉', '約', '束', '_', '万', 'ヲ', '左', '右', '峠',
@@ -721,7 +724,7 @@ const PORTRAITS: [&str; 256] = [
     "Vyland",
     "Bantu",
     "Caesar",
-    "Caesar",
+    "Radd",
     "Midia",
     "Catria",
     "Maria",
