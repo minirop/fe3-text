@@ -7,8 +7,8 @@ use clap::Parser;
 use clap::Subcommand;
 use clap_num::maybe_hex;
 use indexmap::IndexMap;
-use std::fs::read_to_string;
 use std::fs::File;
+use std::fs::read_to_string;
 use std::io::Cursor;
 use std::io::Read;
 use std::io::Seek;
@@ -37,8 +37,14 @@ enum Commands {
 
 #[derive(Subcommand, Debug)]
 enum CompilerCommands {
-    Dialogue { output: String },
-    List { output: String },
+    Dialogue {
+        output: String,
+    },
+    List {
+        output: String,
+        #[arg(short, long)]
+        skip_endings: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -61,7 +67,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match args.command {
         Commands::Compile { command } => match command {
             CompilerCommands::Dialogue { output } => compile_dialogue(&args.filename, &output),
-            CompilerCommands::List { output } => compile_array_of_string(&args.filename, &output),
+            CompilerCommands::List {
+                output,
+                skip_endings,
+            } => compile_array_of_string(&args.filename, &output, skip_endings),
         },
         Commands::Decompile { command } => match command {
             DecompilerCommands::Dialogue { offset } => decompile_dialogue(&args.filename, offset),
@@ -570,7 +579,11 @@ fn print_array_of_strings(
     Ok(())
 }
 
-fn compile_array_of_string(filename: &str, output: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn compile_array_of_string(
+    filename: &str,
+    output: &str,
+    skip_endings: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let strings = read_to_string(filename)?;
     let strings: IndexMap<String, String> = serde_json::from_str(&strings).unwrap();
 
@@ -593,7 +606,17 @@ fn compile_array_of_string(filename: &str, output: &str) -> Result<(), Box<dyn s
                 write!(output_file, " ${:02X} ${:02X}", index & 0xFF, index >> 8)?;
             }
         }
-        writeln!(output_file, " $FF $FF")?;
+
+        if !skip_endings {
+            writeln!(output_file, " $FF $FF")?;
+        } else {
+            writeln!(output_file)?;
+        }
+    }
+
+    // when skipping endings, keep the last one
+    if skip_endings {
+        writeln!(output_file, ".db $FF $FF")?;
     }
 
     Ok(())
