@@ -239,7 +239,7 @@ fn decompile_dialogue(filename: &str, offset: u64) -> Result<(), Box<dyn std::er
 
                     println!("[SwitchFrame({position})]");
                 }
-                0x93 => println!("[Unknown93]"),
+                0x93 => println!("[FlashScreen]"),
                 0x94 => {
                     let frames = rom.read_u16::<LittleEndian>()?;
                     println!("[TimedWaitForA({frames})]");
@@ -496,7 +496,7 @@ fn compile_dialogue(filename: &str, output: &str) -> Result<(), Box<dyn std::err
                     };
                     file.write_u8(position)?;
                 }
-                "Unknown93" => file.write_u8(0x93)?,
+                "FlashScreen" => file.write_u8(0x93)?,
                 "TimedWaitForA" => {
                     assert_eq!(args.len(), 1);
 
